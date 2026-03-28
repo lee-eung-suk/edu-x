@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MessageCircle, Heart, Share, FileText, MoreHorizontal, Repeat2, BarChart2, Bookmark, Calendar, MapPin } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { MessageCircle, Heart, Share, FileText, MoreHorizontal, Repeat2, BarChart2, Bookmark, Calendar, MapPin, Edit2, Trash2, Pin, Link as LinkIcon, Code, EyeOff, UserX, VolumeX } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { auth, db } from '../firebase';
@@ -11,10 +11,49 @@ import { useStore } from '../store/useStore';
 export default function Post({ post, user }: { post: any, user?: any, key?: any }) {
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likesCount || post.likes || 0);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { bookmarks, toggleBookmark } = useStore();
 
   const isBookmarked = bookmarks.includes(post.id);
+  const isAuthor = auth.currentUser?.uid === (post.authorId || post.userId);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDropdown(false);
+    if (!auth.currentUser || !post.id) return;
+    if (window.confirm('게시글을 삭제하시겠습니까?')) {
+      try {
+        await deleteDoc(doc(db, 'posts', post.id));
+        toast.success('게시글이 삭제되었습니다.');
+      } catch (error) {
+        console.error("Error deleting post:", error);
+        toast.error('게시글 삭제 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
+  const handleAction = (actionName: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDropdown(false);
+    toast(`${actionName} 기능은 준비 중입니다.`, { icon: '🛠️' });
+  };
 
   React.useEffect(() => {
     const checkLike = async () => {
@@ -115,9 +154,65 @@ export default function Post({ post, user }: { post: any, user?: any, key?: any 
               {post.createdAt ? formatDistanceToNow(post.createdAt instanceof Date ? post.createdAt : post.createdAt.toDate(), { addSuffix: false, locale: ko }).replace('약 ', '') : '방금'}
             </span>
           </div>
-          <button className="text-x-gray hover:text-x-blue hover:bg-x-blue/10 p-2 rounded-full transition-colors -mr-2">
-            <MoreHorizontal size={18} />
-          </button>
+          <div className="relative" ref={dropdownRef}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}
+              className="text-x-gray hover:text-x-blue hover:bg-x-blue/10 p-2 rounded-full transition-colors -mr-2"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            
+            {showDropdown && (
+              <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.1)] border border-gray-100 z-50 py-2 overflow-hidden">
+                {isAuthor ? (
+                  <>
+                    <button onClick={handleAction('게시글 수정')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                      <Edit2 size={18} className="text-x-gray" />
+                      게시글 수정
+                    </button>
+                    <button onClick={handleDelete} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-[#f4212e] hover:bg-gray-50 transition-colors">
+                      <Trash2 size={18} className="text-[#f4212e]" />
+                      게시글 삭제
+                    </button>
+                    <button onClick={handleAction('프로필에 고정하기')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                      <Pin size={18} className="text-x-gray" />
+                      프로필에 고정하기
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={handleAction('이 게시글 숨기기')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                      <EyeOff size={18} className="text-x-gray" />
+                      이 게시글 숨기기
+                    </button>
+                    <button onClick={handleAction('작성자 차단하기')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                      <UserX size={18} className="text-x-gray" />
+                      {authorHandle} 차단하기
+                    </button>
+                    <button onClick={handleAction('작성자 뮤트하기')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                      <VolumeX size={18} className="text-x-gray" />
+                      {authorHandle} 뮤트하기
+                    </button>
+                  </>
+                )}
+                <div className="h-[1px] bg-gray-100 my-1"></div>
+                <button onClick={(e) => { e.stopPropagation(); setShowDropdown(false); handleShare(); }} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                  <LinkIcon size={18} className="text-x-gray" />
+                  링크 복사
+                </button>
+                <button onClick={handleAction('게시글 퍼가기')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                  <Code size={18} className="text-x-gray" />
+                  게시글 퍼가기
+                </button>
+                {isAuthor && (
+                  <button onClick={handleAction('트윗 분석 보기')} className="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] font-bold text-x-black hover:bg-gray-50 transition-colors">
+                    <BarChart2 size={18} className="text-x-gray" />
+                    트윗 분석 보기
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {post.text && (
