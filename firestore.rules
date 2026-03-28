@@ -29,28 +29,34 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'name', 'email', 'photoURL', 'role', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'name', 'email', 'photoURL', 'role', 'createdAt', 'handle', 'bio']) &&
              data.uid is string && data.uid.size() > 0 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.email is string && isValidEmail(data.email) &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000)) &&
+             (!('handle' in data) || (data.handle is string && data.handle.size() < 50)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 500)) &&
              data.role in ['teacher', 'admin'] &&
              data.createdAt is timestamp;
     }
 
     function isValidPost(data) {
-      return hasOnlyAllowedFields(['id', 'authorId', 'authorName', 'authorPhoto', 'text', 'imageUrl', 'fileUrl', 'fileName', 'createdAt', 'likesCount', 'commentsCount']) &&
+      return hasOnlyAllowedFields(['id', 'authorId', 'authorName', 'authorHandle', 'authorPhoto', 'text', 'imageUrl', 'fileUrl', 'fileName', 'date', 'location', 'createdAt', 'likesCount', 'commentsCount', 'bookmarksCount']) &&
              data.id is string && data.id.size() > 0 &&
              data.authorId is string && data.authorId.size() > 0 &&
              data.authorName is string && data.authorName.size() > 0 && data.authorName.size() < 100 &&
+             (!('authorHandle' in data) || (data.authorHandle is string && data.authorHandle.size() < 50)) &&
              (!('authorPhoto' in data) || (data.authorPhoto is string && data.authorPhoto.size() < 1000)) &&
-             data.text is string && data.text.size() > 0 && data.text.size() <= 1000 &&
+             data.text is string && data.text.size() >= 0 && data.text.size() <= 1000 &&
              (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 1000)) &&
              (!('fileUrl' in data) || (data.fileUrl is string && data.fileUrl.size() < 1000)) &&
              (!('fileName' in data) || (data.fileName is string && data.fileName.size() < 200)) &&
+             (!('date' in data) || (data.date is string && data.date.size() < 50)) &&
+             (!('location' in data) || (data.location is string && data.location.size() < 200)) &&
              data.createdAt is timestamp &&
              data.likesCount is number && data.likesCount >= 0 &&
-             data.commentsCount is number && data.commentsCount >= 0;
+             data.commentsCount is number && data.commentsCount >= 0 &&
+             (!('bookmarksCount' in data) || (data.bookmarksCount is number && data.bookmarksCount >= 0));
     }
 
     function isValidLike(data) {
@@ -89,12 +95,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidPost(request.resource.data) &&
                     request.resource.data.authorId == request.auth.uid &&
                     request.resource.data.likesCount == 0 &&
-                    request.resource.data.commentsCount == 0;
+                    request.resource.data.commentsCount == 0 &&
+                    (!('bookmarksCount' in request.resource.data) || request.resource.data.bookmarksCount == 0);
       allow update: if isAuthenticated() && isValidPost(request.resource.data) &&
                     (
                       // Owner can update text/images but not counts/authorId
                       (request.resource.data.authorId == request.auth.uid &&
-                       areImmutableFieldsUnchanged(['id', 'authorId', 'authorName', 'createdAt', 'likesCount', 'commentsCount']))
+                       areImmutableFieldsUnchanged(['id', 'authorId', 'authorName', 'authorHandle', 'createdAt', 'likesCount', 'commentsCount', 'bookmarksCount']))
                       ||
                       // Anyone can increment likesCount by exactly 1 or -1
                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount']) &&
@@ -103,6 +110,10 @@ service cloud.firestore {
                       // Anyone can increment commentsCount by exactly 1 or -1
                       (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentsCount']) &&
                        math.abs(request.resource.data.commentsCount - resource.data.commentsCount) == 1)
+                      ||
+                      // Anyone can increment bookmarksCount by exactly 1 or -1
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bookmarksCount']) &&
+                       math.abs(request.resource.data.bookmarksCount - resource.data.bookmarksCount) == 1)
                     );
       allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
     }

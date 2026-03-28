@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import Post from './Post';
+import { dummyPosts, dummyUsers } from '../dummyData';
 
 export default function Feed() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -19,10 +20,20 @@ export default function Feed() {
         id: doc.id,
         ...doc.data()
       }));
-      setPosts(postsData);
+      
+      // Merge Firebase posts with dummy posts for demonstration
+      const mergedPosts = [...postsData, ...dummyPosts].sort((a: any, b: any) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt;
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt;
+        return (dateB?.getTime() || 0) - (dateA?.getTime() || 0);
+      });
+      
+      setPosts(mergedPosts);
       setLoading(false);
     }, (error) => {
       console.error("Error fetching posts:", error);
+      // Fallback to dummy data on error
+      setPosts(dummyPosts);
       setLoading(false);
     });
 
@@ -44,9 +55,11 @@ export default function Feed() {
           아직 작성된 게시글이 없습니다. 첫 번째 글을 남겨보세요!
         </div>
       ) : (
-        posts.map((post) => (
-          <Post key={post.id} post={post} />
-        ))
+        posts.map((post) => {
+          // Find dummy user if it's a dummy post
+          const dummyUser = dummyUsers.find(u => u.uid === post.userId);
+          return <Post key={post.id} post={post} user={dummyUser} />;
+        })
       )}
     </div>
   );
